@@ -21,8 +21,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
-          context: ./rest_api_server/2/frontend/flight-booking-app
-          file: ./rest_api_server/2/frontend/flight-booking-app/Dockerfile
+          context: ./2/frontend/flight-booking-app
+          file: ./2/frontend/flight-booking-app/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_HUB_USERNAME }}/flight-booking-app:${{ github.sha }}
 

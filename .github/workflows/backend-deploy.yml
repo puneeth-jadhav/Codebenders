@@ -1,0 +1,63 @@
+name: Build and Deploy backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./rest_api_server/2/backend
+          file: ./rest_api_server/2/backend/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/backend:${{ github.sha }}
+
+  deploy:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Check if Docker is installed, install if not
+            if ! command -v docker &> /dev/null; then
+              echo "Docker not found. Installing Docker..."
+              sudo apt update
+              sudo apt install -y docker.io
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo chmod 666 /var/run/docker.sock
+            fi
+
+            # Log in to Docker Hub
+            echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin
+
+            # Pull the latest image and run the container
+            sudo docker pull ${ secrets.DOCKER_HUB_USERNAME }/backend:${ github.sha }
+
+            # Stop and remove existing container if running
+            if [ "$(sudo docker ps -q -f name=backend)" ]; then
+              sudo docker stop backend
+              sudo docker rm backend
+            fi
+
+            # Run the new container
+            sudo docker run -d --restart always -p 8000:8000 --name backend ${{ secrets.DOCKER_HUB_USERNAME }}/backend:${{ github.sha }}
